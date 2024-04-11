@@ -1,0 +1,37 @@
+---
+title: "Independent model building"
+author: "HealthyR+: Practical Logistic Regression, Session 4"
+date: today
+format:
+  html:
+    code-fold: true
+editor: visual
+---
+
+# Data and packages set-up
+
+```{r}
+library(tidyverse)
+library(broom)
+library(finalfit)
+library(GGally) #ggpairs function
+library(pROC)   # auc statistic
+theme_set(theme_bw())
+
+load("melanoma_factored.rda")
+melanoma_data = mydata
+rm(mydata)
+```
+
+# Tasks
+
+-   create a fixed follow-up period variable (like 5-year mortality)
+
+-   Feel free to explore and plot these data any way you wish!
+
+-   For instance:
+
+    -   Explore a univariable model of mortality \~ ulcer.factor
+    -   Explore a univariable model of mortality \~ sex.factor
+    -   Build a multivariable model of mortality against other variables.
+    -   Explore interactions
