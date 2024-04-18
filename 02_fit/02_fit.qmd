@@ -3,15 +3,20 @@ title: "Model building principles"
 author: "HealthyR+: Practical Logistic Regression, Session 2"
 date: today
 format:
+  pdf: default
   html:
     code-fold: true
 editor: visual
 ---
 
+::: callout-important
+Before starting this session, make sure you've properly restarted R following these instructions: [https://argoshare.is.ed.ac.uk/healthyr_book/restart-r-regularly.htm](https://argoshare.is.ed.ac.uk/healthyr_book/restart-r-regularly.html)
+:::
+
+
 ```{r}
 #| message: false
 #| warning: false
-
 
 library(tidyverse)
 library(broom)
@@ -20,7 +25,21 @@ library(GGally) # ggpairs function
 library(pROC)   # auc statistic
 theme_set(theme_bw())
 
-load(here::here("mydata_modified_use.rda"))
+heart_data = wcgs
+
+# derived variables from previous session
+heart_data = heart_data %>%
+  mutate(years = (timechd/365) %>% 
+           ff_label("Time (years)"),
+         # CHD status at 8 years:
+         chd_8yr = case_when(years >= 8 ~ "No" ,
+                              years < 8 & chd == "Yes"  ~ "Yes",
+                              years < 8 & chd == "No" ~ "Censored",
+                              .default = "Other"
+                            ) %>% 
+           na_if("Censored") %>% 
+           factor() %>% 
+           ff_label("8-yr CHD"))
 
 ```
 
@@ -36,17 +55,16 @@ This is how a simple model for our data looks (only using one explanatory variab
 
 ```{r}
 
-glm(mort_5yr ~ rx.factor, data = colon_data, family = "binomial")
+glm(chd_8yr ~ personality_2L, data = heart_data, family = "binomial")
 
 ```
 
-Discuss: The coefficients for Lev and Lev+5FU are -0.059 and -0.450, respectively. What are these numbers are why are they so different to what we saw in the univariable column in Session 1 (we saw odds ratios of 0.94 and 0.64)?
+Discuss: The coefficient for type A personality is 0.7452. What is this numbers are why is it different to what we saw in the univariable column from `finalfit()` in Session 1 (we saw an odds ratio of 2.1)?
 
 Answer: Because these are the "raw" logits, we need to exponentiate to get odds ratios (you can even do this on the calculator on your phone!):
 
 ```{r}
-exp(-0.058)
-exp(-0.450)
+exp(0.7452)
 ```
 
 ## Accessing the results - the classical R way
@@ -54,47 +72,50 @@ exp(-0.450)
 Let's save the glm() result into a variable:
 
 ```{r}
-
-my_logreg1 = glm(mort_5yr ~ rx.factor, data = colon_data, family = "binomial")
-
+my_logreg1 = glm(chd_8yr ~ personality_2L, data = heart_data, family = "binomial")
 ```
 
-Ask R to print the
+Ask R to print the results using the `summary()` function (base R):
 
 ```{r}
-
 my_logreg1 %>% summary()
-
 ```
 
-Now try to investigate the variable `my_logreg1` in the Environment tab. The reason it looks so messy is because it's a list, rather than a data frame. In the past, we would have used our knowledge about the structure to pull out value, e.g. the exponentiation of the coefficients would look like:
+Now try to investigate the variable `my_logreg1` in the Environment tab. The reason it looks so messy is because it's a list, rather than a data frame/tibble. In the past, we would have used our knowledge about the structure to pull out value, e.g. the exponentiation of the coefficients would look like:
 
 ```{r}
 my_logreg1$coefficients %>% exp()
 
 #or saving them into a variable:
-my_coefs1 = my_logreg1$coefficients %>% exp() %>% as.data.frame()
+my_coefs1 = my_logreg1$coefficients %>%
+  exp() %>%
+  as.data.frame()
 
 my_coefs1
 
 ```
 
-But this means you have to know the structure/names of the model elements, and it still converts into uncomfortable data frame. Look how my_coefs1 has variables saved as row names rather than a proper column.
+But this means you have to know the structure/names of the model elements, and it still converts into an uncomfortable data frame. Look how `my_coefs1` has variables saved as row names rather than a proper column.
 
 And creating confidence intervals would have looked like this:
 
 ```{r}
 
-my_confints = my_logreg1 %>% confint() %>% as.data.frame()
+my_confints = my_logreg1 %>%
+  confint() %>%
+  as.data.frame()
 
-my_confints
+my_confints %>% 
+  exp()
 
 ```
 
-Which again creates another weird data frame with row names and % in column headers. Really we want to be using variable names that **do not** have spaces in them or we'll need to start wrapping the names in \`\`:
+Which again creates another weird data frame with row names and % in column headers. Really we want to be using variable names that **do not** have spaces and don't start with a number or we'll need to start wrapping them in \`\` (note that quotes would not work here):
 
 ```{r}
-my_confints$`2.5 %`
+my_confints %>% 
+  mutate(conf_low = exp(`2.5 %`),
+         conf_high = exp(`97.5 %`))
 ```
 
 ## Accessing the results in an efficient way
@@ -106,29 +127,23 @@ library(broom)
 
 my_logreg1 %>% 
   tidy()
-
 ```
 
 But we have to tell it that we want the `estimate` (=coefficient) exponentiated, and that we want confidence intervals calculated as well:
 
 ```{r}
-
-my_logreg_tidy = my_logreg1 %>% 
+my_logreg1 %>% 
   tidy(exponentiate = TRUE, conf.int = TRUE)
-
-my_logreg_tidy
-
 ```
 
 ### Exercise 1
 
 The default confidence level of `tidy()` is set at 95%. Change it to 90%.
 
-Hint: Usually, you would press F1 on the function you are using and look at its list of arguments to find out what the option for the the confidence level is called exactly. However, because `tidy()` works differently depending on the statistial object you input, it's main Help page is very generic. The information we are looking for comes up when you press F1 on `tidy.lm`. Or you could just Google "r change tidy confidence intervals").
+Hint: Usually, you would press F1 on the function you are using and look at its list of arguments to find out what the option for the the confidence level is called exactly. However, because `tidy()` works differently depending on the statistical object you input, it's main Help page is very generic. The information we are looking for comes up when you press F1 on `tidy.lm`. Or you could Google "r change tidy confidence intervals").
 
 ```{r}
 # your R code here...
-
 
 ```
 
@@ -136,7 +151,7 @@ Hint: Usually, you would press F1 on the function you are using and look at its 
 
 Binary logistic regression is robust to many of the assumptions which cause problems in other statistical analyses. The main assumptions are:
 
-1.  Binary dependent variable - this is obvious, but we need to check (alive, death from disease, death from other causes doesn't work);
+1.  Binary dependent variable - this is obvious, but we need to check (alive vs death from disease only; death from other causes doesn't work);
 
 2.  Independence of observations - the observations should not be repeated measurements or matched data;
 
@@ -146,36 +161,26 @@ Binary logistic regression is robust to many of the assumptions which cause prob
 
 ## Linearity of continuous variables to the response
 
-If a variable is continuous, it will be treated as if that variable has a linear relationship with the outcome (log-odds). Take age as an example. If the outcome, say death, gets more frequent or less frequent as age rises, the model will work well. However, say children and the elderly are at high risk of death, but those in middle years are not, then there is no linear relationship. This can be checked using these clever plots.
+If a variable is continuous, it will be treated as if that variable has a linear relationship with the outcome (log-odds). This can be checked using these clever plots:
 
 ```{r}
-#| warning: false
-#| message: false
+heart_data = heart_data %>%
+  mutate(chd_8yr.num = as.numeric(chd_8yr)-1) 
 
-colon_data = colon_data %>% mutate(mort_5yr.num = as.numeric(mort_5yr)-1) 
-
-colon_data %>% 
-  ggplot(aes(age, mort_5yr.num)) + 
+# single variable: age ~ CHD
+heart_data %>% 
+  ggplot(aes(age, chd_8yr.num)) + 
   geom_point(alpha = 0.1) +
   geom_smooth(method = "loess")
 
-
-colon_data %>% 
-  ggplot(aes(nodes, mort_5yr.num)) + 
+# multiple variables in one go:
+heart_data %>% 
+  pivot_longer(c(age, height, sbp, chol)) %>% 
+  ggplot(aes(value, chd_8yr.num)) +
+  facet_wrap(~name, scales = "free") +
   geom_point(alpha = 0.1) +
   geom_smooth(method = "loess")
 
-```
-
-```{r}
-
-colon_data = colon_data %>% mutate(nodes.4groups = cut(nodes, breaks = c(0, 4, 10, 33),
-                                               include.lowest = TRUE))
-
-colon_data %>% 
-  ggplot(aes(as.numeric(nodes.4groups), mort_5yr.num)) + 
-  geom_point(alpha = 0.1) +
-  geom_smooth(method = "loess")
 
 
 ```
@@ -186,22 +191,20 @@ The presence of two or more highly correlated variables in a regression analysis
 
 The first is when two highly correlated variables have been included in a model, sometimes referred to simply as collinearity. This can be detected by thinking about which variables may be correlated, and then checking using plotting.
 
-The second situation is more devious. It is where collinearity exists between three or more variables, even when no pair of variables is particularly highly correlated. To detect this, we can use a specific metric called the *variance inflation factor*.
+The second situation is more devious. It is where collinearity exists between three or more variables, even when no one pair of variables is particularly highly correlated. To detect this, we can use a specific metric called the *variance inflation factor*.
 
 The `ggpairs()` function from `library(GGally)` gives you all the plots you can dream of and more, but it is a lot:
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 10
+#| fig-height: 10
 #| message: false
 #| warning: false
 
-explanatory = c("rx.factor", "age.factor", "sex.factor",
-                # "obstruct.factor", "perfor.factor", "adhere.factor",
-                "loccomp.factor", "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp", "chol", "smoking")
 
-colon_data %>% 
+heart_data %>% 
   ggpairs(columns = explanatory)
 
 ```
@@ -211,29 +214,29 @@ So let's investigate the variables in reasonable groups/chunks.
 ### Continuous to continuous
 
 ```{r}
-#| fig-width: 6
-#| fig-height: 6
+#| fig-width: 8
+#| fig-height: 8
 #| message: false
 #| warning: false 
 
-select_explanatory = c("age", "nodes")
+select_explanatory = c("age", "weight", "sbp", "chol", "smoking")
 
-colon_data %>% 
+heart_data %>% 
   ggpairs(columns = select_explanatory)
 
 ```
 
 ### Continuous to categorical
 
-Let's split that up a bit and use the `pivot_longer()` and `facet_wrap()` combination as in Session 1. This time, because we want to compare everything against, for example, age, we need to add `-age` to the `pivot_longer()` call so it doesn't get lumped up with everything else:
+We could use ggpairs again, but if we adapt our `pivot_longer()` and `facet_wrap()` combination from Session 1 we'll get clearer plots if we also limit to a single continuous variable to check against. For example, we can add `-age` to the `pivot_longer()` call so it remains in a separate column and doesn't get lumped up with everything else:
 
 ```{r}
 #| fig-width: 5
-#| fig-height: 4
+#| fig-height: 3
 
-colon_data %>% 
-  select(age, extent.factor, sex.factor, loccomp.factor, surg.factor, differ.factor) %>% 
-  pivot_longer(cols= -age) %>% 
+heart_data %>% 
+  select(age, personality_2L, smoking, arcus) %>% 
+  pivot_longer(cols = -age) %>% 
   ggplot(aes(value, age)) +
   geom_boxplot() +
   facet_wrap(~name, scale = "free", ncol = 2) +
@@ -241,9 +244,11 @@ colon_data %>%
 
 ```
 
+Is there collinearity between age and our three categorical explanatory variables?
+
 ### Exercise 2
 
-Copy the code from above and change `age` to `nodes` (in the select(), pivot_longer() and ggplot() calls):
+Copy the code from above and change `age` to `height` (in the select(), pivot_longer() and ggplot() calls):
 
 ```{r}
 #| fig-width: 5
@@ -254,28 +259,28 @@ Copy the code from above and change `age` to `nodes` (in the select(), pivot_lon
 
 ```
 
+Is there collinearity between height and our three explanatory variables?
+
 ### Categorical to categorical
 
 ```{r}
 #| fig-width: 7
 
-
-colon_data %>%
-  select(extent.factor, sex.factor, loccomp.factor, surg.factor, differ.factor) %>% 
-  pivot_longer(cols = c(loccomp.factor,
-                       differ.factor, extent.factor, surg.factor)) %>% 
+heart_data %>%
+  select(personality_2L, smoking, arcus) %>% 
+  pivot_longer(-personality_2L) %>% 
   drop_na() %>%
-  ggplot(aes(value, fill = sex.factor)) + 
+  ggplot(aes(value, fill = personality_2L)) + 
   geom_bar(position = "fill") +
-  facet_wrap(~name, scale = "free", ncol = 2) +
+  facet_wrap(~name, scale = "free", ncol = 1) +
   coord_flip()
-  
-  
 ```
 
 ### Exercise 3
 
-Copy the above code and change sex to differentiation:
+Compare how arcus and personality relate to smoking status.
+
+Hint: copy the code from above, in pivot_longer() and ggplot() change the variable from personality_2L to smoking.
 
 ```{r}
 #| fig-width: 7
@@ -286,52 +291,23 @@ Copy the above code and change sex to differentiation:
   
 ```
 
-Run the plot for local complications:
-
-```{r}
-#| fig-width: 7
-#| echo: false
-
-
-colon_data %>% 
-  select(extent.factor, sex.factor, loccomp.factor, surg.factor, differ.factor) %>% 
-  pivot_longer(cols = c(sex.factor, differ.factor, extent.factor, surg.factor)) %>% 
-  drop_na() %>%
-  ggplot(aes(value, fill = loccomp.factor)) + 
-  geom_bar(position = "fill") +
-  facet_wrap(~name, scale = "free", ncol = 2) +
-  coord_flip()
-  
-```
-
-**AHA!** One of the pairs of variables does show a dependency: `extent.factor` and `loccomp.factor`. Remember, we defined any local complications as `loccomp.factor = if_else(perfor.factor == "Yes" | obstruct.factor == "Yes" | adhere.factor == "Yes", "Yes", "No")`. Let's looks at what the variables separately:
-
-```{r}
-#| fig-width: 7
-#| echo: false
-
-colon_data %>% 
-  select(perfor.factor, obstruct.factor, adhere.factor, extent.factor) %>%
-  pivot_longer(cols = c(perfor.factor,
-                       obstruct.factor, adhere.factor))  %>% 
-    drop_na() %>%
-  ggplot(aes(extent.factor, fill = value)) + 
-  geom_bar(position = "fill") +
-  facet_wrap(~name, scale = "free", ncol = 2) +
-  coord_flip()
-  
-```
-
 ### Exercise 4
 
-Remember that these plots don't remind us how many observations each group has. Plot the above on an absolute scale again (like the barplots we had in Session 1). Hint: `position = "fill"` inside `geom_bar()` standardises each bar to a constant height to give proportions.
+Remember that these plots don't remind us how many observations each group has. Plot the above on an absolute scale again (like the barplots we had in Session 1). Hint: `position = "fill"` inside `geom_bar()` standardises each bar to a constant height to give proportions, try changing "fill" to "dodge" or "stack".
 
 ```{r}
 #| fig-width: 7
 #| echo: false
 
 # Your R code here ...
-
+heart_data %>%
+  select(personality_2L, smoking, arcus) %>% 
+  pivot_longer(-personality_2L) %>% 
+  drop_na() %>%
+  ggplot(aes(value, fill = personality_2L)) + 
+  geom_bar(position = "stack") +
+  facet_wrap(~name, scale = "free", ncol = 1) +
+  coord_flip()
 ```
 
 Seeing how adherence, obstruction, perforation, and extent are related, it does not make sense include all of them in the multivariate model as the algorithm won't be able to separate the effects of each on 5-year mortality.
@@ -344,9 +320,12 @@ As a final check for the presence of higher-order correlations, the variance inf
 #| fig-width: 7
 #| echo: false
 
-colon_data %>% 
-  glmmulti(dependent = "mort_5yr", 
-           explanatory = c("extent.factor", "adhere.factor","obstruct.factor","perfor.factor", "sex.factor", "loccomp.factor", "surg.factor", "differ.factor", "age.factor", "node4.factor")) %>%
+dependent = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp", "chol", "smoking")
+
+heart_data %>% 
+  glmmulti(dependent, explanatory) %>%
   car::vif()
 
 ```
@@ -411,8 +390,8 @@ roc(my_logreg1$y, my_logreg1$fitted) %>% auc()
 Or we can get finalfit to include metrics in the final table:
 
 ```{r}
-colon_data %>% 
-finalfit("mort_5yr", "rx.factor", metrics = TRUE)
+heart_data %>% 
+  finalfit("chd_8yr", "personality_2L", metrics = TRUE)
 
 ```
 
@@ -424,11 +403,11 @@ We can save the last line of code into a variable:
 
 ```{r}
 
-fit1_smrz = colon_data %>% 
-  finalfit("mort_5yr", "rx.factor", metrics = TRUE)
+fit1_chd = heart_data %>% 
+  finalfit("chd_8yr", "personality_2L", metrics = TRUE)
 
-fit1 = fit1_smrz[[1]]
-met_fit1 = fit1_smrz[[2]]
+fit1     = fit1_chd[[1]]
+met_fit1 = fit1_chd[[2]]
 
 ```
 
@@ -441,30 +420,17 @@ It is very important to describe and characterise missing data.
 ```{r}
 #| warning: false
 
-dependent   = "mort_5yr"
-explanatory = c("rx.factor", "age.factor", "sex.factor",
-                # "obstruct.factor", "perfor.factor", "adhere.factor",
-                "loccomp.factor", "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
-  
+dependent   = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp", "chol", "smoking")
 
-explore_missing = colon_data %>% 
+explore_missing = heart_data %>% 
   missing_compare(dependent, explanatory)
 
 explore_missing
 
 
 ```
-
-# Directed acyclic graph (DAG)
-
-It is important to think about the causal pathway you are investigating, and identify any confounders and mediators.
-
-![](dagitty-model-overview.png)
-
-An example DAG for our dataset could be:
-
-![](dagitty-model.png)
 
 ## Answers
 
@@ -484,47 +450,42 @@ my_logreg_tidy
 #| fig-width: 5
 #| fig-height: 4
 
-colon_data %>% 
-  select(nodes, extent.factor, sex.factor, loccomp.factor, surg.factor, differ.factor) %>%
-  pivot_longer(cols= -nodes) %>% 
-  ggplot(aes(value, nodes)) +
+heart_data %>% 
+  select(height, personality_2L, smoking, arcus) %>% 
+  pivot_longer(cols = -height) %>% 
+  ggplot(aes(value, height)) +
   geom_boxplot() +
   facet_wrap(~name, scale = "free", ncol = 2) +
   coord_flip()
-
-
 ```
 
 ### 3.
 
 ```{r}
-#| fig-width: 7
+#| fig-width: 6
 
-colon_data %>%
-  select(extent.factor, sex.factor, loccomp.factor, surg.factor, differ.factor) %>% 
-  pivot_longer(cols = c(loccomp.factor,sex.factor, 
-                        extent.factor, surg.factor)) %>% 
+heart_data %>%
+  select(personality_2L, smoking, arcus) %>% 
+  pivot_longer(-smoking) %>% 
   drop_na() %>%
-  ggplot(aes(value, fill = differ.factor)) + 
+  ggplot(aes(value, fill = smoking)) + 
   geom_bar(position = "fill") +
-  facet_wrap(~name, scale = "free", ncol = 2) +
+  facet_wrap(~name, scale = "free", ncol = 1) +
   coord_flip()
 ```
 
 ### 4.
 
 ```{r}
-#| fig-width:: 7
+#| fig-width: 7
 #| echo: false
 
-
-colon_data %>% 
-  select(perfor.factor, obstruct.factor, adhere.factor, extent.factor) %>%
-  pivot_longer(cols = c(perfor.factor,
-                       obstruct.factor, adhere.factor))  %>% 
-    drop_na() %>%
-  ggplot(aes(extent.factor, fill = value)) + 
-  geom_bar() +
-  facet_wrap(~name, scale = "free", ncol = 2) +
+heart_data %>%
+  select(personality_2L, smoking, arcus) %>% 
+  pivot_longer(-personality_2L) %>% 
+  drop_na() %>%
+  ggplot(aes(value, fill = personality_2L)) + 
+  geom_bar(position = "stack") +
+  facet_wrap(~name, scale = "free", ncol = 1) +
   coord_flip()
 ```

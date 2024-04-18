@@ -3,6 +3,7 @@ title: "Introduction and data exploration"
 author: "HealthyR+: Practical Logistic Regression, Session 1"
 date: today
 format:
+  pdf: default
   html:
     code-fold: true
 editor: visual
@@ -12,7 +13,7 @@ editor: visual
 
 A regression analysis is a statistical process for estimating the relationships between variables. For instance, we may try to predict the blood pressure of a group of patients based on their age. As age and blood pressure are on a continuous scale, this is an example of linear regression.
 
-Logistic regression is an extension of this, where the variable being predicted is *categorical*. We will deal with binary logistic regression, where the variable being predicted has two levels, e.g. yes or no, 0 or 1. In healthcare this is usually done for an event (like death) occurring or not occurring. Logistic regression can tell us the probability of the outcome occurring.
+Logistic regression is an extension of this, where the variable being predicted is categorical. We will deal with binary logistic regression, where the variable being predicted has two levels, e.g. yes or no, 0 or 1. In healthcare this is usually done for an event (like death) occurring or not occurring. Logistic regression can tell us the probability of the outcome occurring.
 
 Logistic regression lets you adjust for the effects of confounding factors on an outcome. When you read a paper that says it has adjusted for confounding factors, this is the usual method which is used.
 
@@ -38,13 +39,23 @@ Logistic regression can be performed to examine the influence of one predictor v
 
 (**Multivariate** - technically means more than one **Dependent variable** (we will not discuss this type of analysis), but very often used interchangeably with **Multivariable**.)
 
+# Directed acyclic graph (DAG)
+
+It is important to think about the causal pathway you are investigating, and identify any confounders and mediators.
+
+![](dagitty-model-overview.png)
+
+## Exercise 0
+
+Let's make a DAG for our dataset: <https://www.dagitty.net/>
+
 ## Discussion
 
 Why is one of the columns called univariable analysis when it clearly includes several explanatory variables?
 
 ![](globalsurg_logreg.png)
 
-Source: Mortality of emergency abdominal surgery in high-, middle-, and low-income countries.GlobalSurg Collaborative (2016). British Journal of Surgery, 103(8), 971-988.
+Source: Mortality of emergency abdominal surgery in high-, middle-, and low-income countries. GlobalSurg Collaborative (2016). British Journal of Surgery, 103(8), 971-988.
 
 ## Odds and probabilities
 
@@ -68,7 +79,7 @@ An alternative is a ratio of probabilities, called a risk ratio or relative risk
 
 ## Advanced: Logit function
 
-An assumption of simple linear regression is that the residuals are normally distributed. A residual is the difference between an observation (*y*) and the prediction of that observation by the model. This doesn't mean that the dependent *Y* must be normally distributed, but it does have to be continuous, unbounded and measured on an interval or ratio scale.
+An assumption of simple linear regression is that the residuals are normally distributed. A residual is the difference between an observation (y) and the prediction of that observation by the model. This doesn't mean that the dependent Y must be normally distributed, but it does have to be continuous, unbounded and measured on an interval or ratio scale.
 
 Unfortunately, binary dependent variables fulfill none of these requirements.
 
@@ -78,7 +89,7 @@ Rather than estimating $y$ = 0 or $y$ = 1 from the $x$-axis, we estimate the pro
 
 The odds scale runs from 0 to +∞. Probabilities from 0 to 0.5 are squashed into odds of 0 to 1, and probabilities from 0.5 to 1 have the expansive comfort of 1 to +∞.
 
-This is why we fit binary data on a ***log-odds scale*****.**
+This is why we fit binary data on a **log-odds scale.**
 
 A log-odds scale sounds incredibly off-putting to non-mathematicians, but it is the perfect solution.
 
@@ -94,11 +105,11 @@ In this case we, we use a **logit transformation** to convert $y$ to **log-odds*
 
 $\log_e (\frac{p}{1-p})$, where $p$ is the probability of the outcome occurring.
 
-The logit function is the natural log of the odds that *Y* equals one of the categories.
+The logit function is the natural log of the odds that Y equals one of the categories.
 
 Credit: <http://www.theanalysisfactor.com/what-is-logit-function/>
 
-The fitted lines from a regression model of cardiovascular event by coffee consumption, stratified by smoking can be seen below on the log-odds scale (A) and the probability scale (B).
+The fitted lines from a regression model of cardiovascular event by coffee consumption, stratified by smoking can be seen below on the log-odds scale (A) and the probability scale (B). Source: ["R for Health Data Science" by Harrison & Pius](https://argoshare.is.ed.ac.uk/healthyr_book/binary-logistic-regression.html).
 
 ![](2_prob_logodds.png)
 
@@ -116,152 +127,85 @@ For a categorical variable such as smoking, the odds ratio is the change in odds
 
 ## Load data and packages
 
+3154 healthy young men aged 39-59 from the San Francisco area were assessed for their personality type. All were free from coronary heart disease at the start of the research. Eight and a half years later change in this situation was recorded. Primary outcome variable: coronary heart disease (Yes/No).
+
+**Reference:**
+
+Coronary Heart Disease in the Western Collaborative Group Study Final Follow-up Experience of 8 1/2 Years Ray H. Rosenman, MD; Richard J. Brand, PhD; C. David Jenkins, PhD; Meyer Friedman, MD; Reuben Straus, MD; Moses Wurm, MD JAMA. 1975;233(8):872-877. doi:[10.1001/jama.1975.03260080034016](10.1001/jama.1975.03260080034016).
+
 ```{r}
 #| message: false
-
 library(tidyverse)
 library(finalfit)
 library(knitr)
 library(ggdag)
 
 theme_set(theme_bw())
-
-# Load dataset
-load("healthyr_colon_dataset.rda")
-colon_data = mydata
-rm(mydata)
+# Loading the wcgs dataset from the finalfit package:
+heart_data = wcgs
 ```
 
 For more information and examples see finalfit.org
 
 N.B
 
-`#|` precedes an *executable option* used in Quarto. These are used for chunk settings. You will see them going forward in this Quarto document.
+`#|` precedes an executable option used in Quarto (= the new R Markdown). These are used for chunk settings. You will see them going forward in this Quarto document.
 
 (In an R markdown document you would see the settings presented inside the curly brackets e.g. `{r, echo = FALSE}`).
 
-## Data wrangling: The importance of understanding and recoding your data
-
-Move your cursor to `# survival::colon` inside the chunk and click F1 to see the data dictionary.
-
-```{r}
-
-# survival::colon 
-
-# recode the data
-
-colon_data = colon_data %>% 
-  mutate(sex.factor = sex %>% 
-           factor() %>% 
-           fct_recode("Female" = "0",
-                      "Male"   = "1") %>% 
-           ff_label("Sex"),
-         
-         rx.factor = rx %>% 
-           factor() %>% 
-           ff_label("Treatment"),
-         
-         obstruct.factor = obstruct %>% # obstruction of colon by tumour
-           factor() %>% 
-           fct_recode("No"  = "0",
-                      "Yes" = "1") %>% 
-           ff_label("Obstruction"),
-         
-         perfor.factor = perfor %>% # perforation of colon
-           factor() %>% 
-           fct_recode("No"  = "0",
-                      "Yes" = "1") %>% 
-           ff_label("Perforation"),
-         
-         adhere.factor = adhere %>% # adherence to nearby organs by tumour
-           factor() %>% 
-           fct_recode("No"  = "0",
-                      "Yes" = "1") %>% 
-           ff_label("Adherence"),
-         
-         differ.factor = differ %>% # differentiation of tumour
-           factor() %>% 
-           fct_recode("Well"     = "1",
-                      "Moderate" = "2",
-                      "Poor"     = "3") %>% 
-           ff_label("Differentiation"),
-         
-         extent.factor = extent %>% # Extent of local spread 
-           factor() %>% 
-           fct_recode("Submucosa"           = "1",
-                      "Muscle"              = "2",
-                      "Serosa"              = "3",
-                      "Adj. struct."        = "4") %>% 
-           ff_label("Extent of spread"),
-         
-         surg.factor = surg %>% #	time from surgery to registration
-           factor() %>% 
-           fct_recode("Short" = "0",
-                      "Long"  = "1") %>% 
-           ff_label("Time from surgery"),
-         
-         node4.factor = node4 %>% # more than 4 positive lymph nodes
-           factor() %>% 
-           fct_recode("No"  = "0",
-                      "Yes" = "1") %>% 
-           ff_label(">4 positive nodes"),
-         
-         status.factor = status %>% # status - Died or Censored
-           factor() %>% 
-           fct_recode("Alive"  = "0",
-                      "Died"   = "1") %>% 
-           ff_label("Status"))
-
-
-
-```
-
 ## Data exploration and plotting
 
-Below is a clever piece of code, especially `pivot_longer(cols = where(is.factor))`: we select all variables that are factors (categorical variables in R) into the same column which then makes it easy to plot all with just one ggplot call (and still put them on separate plots with `facet_wrap(~name)`). `name` is the default name `pivot_longer` gives the column that includes all the chosen columns. You could, for example, do `pivot_longer(cols = is.factor, names_to = "all_my_factors")` and `facet_wrap(~all_my_factors)`.
+Below is a clever piece of code, especially `pivot_longer(cols = where(is.factor))`: we select all variables that are factors (=categorical) into the same column which then makes it easy to plot all with just one ggplot call and then put them on separate plots with `facet_wrap(~name)`. `geom_bar()` counts up rows of categorical data for us, so there is no need to use `count()` or `summarise()` beforehand.
 
 ```{r}
-#| warning: false
 #| fig-width: 10
 #| fig-height: 5
 
-colon_data %>%
+heart_data %>%
   pivot_longer(cols = where(is.factor)) %>%
   ggplot(aes(value)) +
+  geom_bar(aes(fill = value), show.legend = FALSE) +
   facet_wrap(~name, scales = "free", ncol = 3) +
-  geom_bar(aes(fill = value), show.legend = F) +
   coord_flip()
-
 ```
 
-Naming the columns of interest also works (unfortunately can't use is.numeric as that includes all the original 0-1 variables):
+Continuous (numeric) data can be explored using a histogram: `geom_histogram()`:
 
 ```{r}
-#| echo: false
-#| message: false
-#| fig-height: 2
+#| fig-width: 10
+#| fig-height: 8
 
 
-colon_data %>%
-  pivot_longer(cols = c(nodes, age, time)) %>% 
+heart_data %>%
+  pivot_longer(cols = where(is.numeric)) %>% 
   ggplot(aes(value)) +
   facet_wrap(~name, scales = "free", ncol = 3) +
-  geom_histogram(alpha = 0.6)
-
+  geom_histogram()
 ```
 
 ### Exercise 1
 
-Create a plot of the `time` variable only, panelled by `status.factor`. Hint: copy the code above and change `value` to `time`.
+Create a plot of the `time` variable only, faceted by `chd`.
+
+Hints:
+
+-   copy the code from above
+
+-   remove the `pivot_longer()` line - this is needed when plotting multiple variables at once
+
+-   change the main variable - inside `ggplot(aes())` - from `value` to `timechd`
+
+-   change the variable being faceted by from `name` to `chd`
+
+-   add in `fig-height` and `fig-weight` as above
 
 How would you plot time in years, not days? Hint: Divide the number of days by 365.
 
 ```{r}
-#| echo: false
 #| message: false
-#| fig-height: 2
 
 # your R code here:
+
 
 
 ```
@@ -271,80 +215,63 @@ Discuss in pairs what this plot shows us.
 ## Derive new variables
 
 ```{r}
-
-colon_data = colon_data %>% 
-  mutate(age.factor = age %>% # in years
-           cut(breaks = c(0,40,60,95), include.lowest = TRUE, right=FALSE,
-               labels = c("<40 years", "40-59 years", "60+ years")) %>% 
-           ff_label("Age"))
-
-
-# local complications:
-# (if either perforation or obstruction is Yes, localcomp is Yes)
-colon_data = colon_data %>% 
-  mutate(loccomp.factor = if_else(perfor.factor == "Yes" | obstruct.factor == "Yes" | adhere.factor == "Yes",
-                           "Yes",
-                           "No") %>% 
-           factor() %>% 
-           ff_label("Local complications"))
-
-
-colon_data = colon_data %>%
-  mutate(time.years = (time/365) %>% 
+heart_data = heart_data %>%
+  mutate(years = (timechd/365) %>% 
            ff_label("Time (years)"))
 
 ```
 
-And now the tricky one: creating a 5-year mortality variable:
+And now the tricky one: creating a binary 8-year CHD variable:
 
 ```{r}
-#| fig-width: 4
+#| fig-width: 5
 #| fig-height: 3
 
-#If the follow-up time is longer than 5 years, then the patient must have been alive at 5 years:
-colon_data = colon_data %>%
-  mutate(mort_5yr = if_else(time.years >= 5,
-                            "Alive",
-                            "Died or Censored"))
+# If the follow-up time is longer than 5 years, then the patient must have been alive at 5 years:
+heart_data = heart_data %>%
+  mutate(chd_8yr = if_else(years >= 8,
+                            "No",
+                            "CHD event or Censored"))
 
-colon_data %>% 
-  ggplot(aes(x = time.years, y = mort_5yr)) +
+heart_data %>% 
+  ggplot(aes(x = years, y = chd_8yr)) +
   geom_point()
 ```
 
-So a single `if_else()` is not enough here - need to separate the Died or Censored. We can do it using the `case_when()` (or alternatively, write multiple nested `if_else()` statements, or create the variable step-by-step using multiple columns).
+If follow-up time is less that 8 years, need to check whether that's because they were diagnosed with CHD they or were lost to follow-up. So a single `if_else()` is not enough here - need to separate the CHD or Censored. We can do it using `case_when()`:
 
 ```{r}
 #| fig-width: 4
 #| fig-height: 3
 
-# If follow-up time is less that 5 years, need to check whether they Died
-# or were Alive (follow-up ended at <5 years)
-colon_data = colon_data %>%
-  mutate(mort_5yr = case_when(time.years >= 5 ~ "Alive" ,
-                              time.years < 5 & status.factor == "Died"  ~ "Died",
-                              time.years < 5 & status.factor == "Alive" ~ "Censored",
+# If follow-up time is less that 8 years, need to check whether that's because they were diagnosed with CHD they or were lost to follow-up:
+heart_data = heart_data %>%
+  mutate(chd_8yr = case_when(years >= 8 ~ "No" ,
+                              years < 8 & chd == "Yes"  ~ "Yes",
+                              years < 8 & chd == "No" ~ "Censored",
                               .default = "Other"
                             ))
 
-colon_data %>% 
-  ggplot(aes(x = time.years, y = mort_5yr)) +
-  geom_point()
+heart_data %>% 
+  ggplot(aes(x = years, y = chd_8yr)) +
+  geom_point(alpha = 0.1)
 
 ```
 
-There should be no patients classified as Other - as it would mean we've made a mistake in the conditions, or some have the time or status missing. But `.default = "Other"` can be supplied to `case_when()`, which is the value assigned when none of the our conditions match. So think of the last line like "Everything else", or "Everything that is left".
+There should be no patients classified as Other - as it would mean we've made a mistake in the conditions, or there's some missing data. The `.default = "Other"` can be supplied to `case_when()`, which is the value assigned when none of the our conditions match. So think of the last line like "Everything else", or "Everything that is left".
 
 Because logistic regression wants a variable with two levels, we'll change the third level - "Censored" - to NA. This way only the two explicit levels - "Alive" or "Died" will be used. We will also make it into a factor and give it a label.
 
 ```{r}
-
-colon_data = colon_data %>% 
-  mutate(mort_5yr =  mort_5yr %>% 
+heart_data = heart_data %>% 
+  mutate(chd_8yr =  chd_8yr %>% 
            na_if("Censored") %>% 
            factor() %>% 
-           ff_label("5-yr mort.")
-         )
+           ff_label("8-yr CHD"))
+
+heart_data %>% 
+  ggplot(aes(x = years, y = chd_8yr)) +
+  geom_point(alpha = 0.1)
 
 ```
 
@@ -368,110 +295,114 @@ Here is a quick introduction our own `finalfit` package.
 
 `finalfit` provides functions to perform univariable and multivariable logistic regression analyses, and to produce publication standard tables and odds ratio plots.
 
-The function `summary_factorlist` produces table summarising a dependent variable by any number of explanatory variables. It requires, 1. a dataframe, 2. a dependent, 3. explanatory variables. There are options which can be seen in the Help tab (press F1 on `summary.factorlist`).
+The function `summary_factorlist` produces table summarising a dependent variable by any number of explanatory variables. It requires, 1. a dataframe, 2. a dependent, 3. explanatory variables. There are options which can be seen in the Help tab (press F1 on `summary_factorlist`).
 
 This is usually what is required for Table 1 in a paper. Explore here to see how it works:
 
 ```{r}
-#| warning: false
-#| message: false
-
-
 library(finalfit)
 
-dependent='rx.factor'
-explanatory = c("age", "sex.factor",
-                # "obstruct.factor", "perfor.factor", "adhere.factor",
-                "loccomp.factor", "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
+dependent = "personality_2L"
+explanatory = c("age", "height", "weight",
+                "sbp", "chol", "smoking", "arcus")
 
-demographics_table = colon_data %>% summary_factorlist(dependent, explanatory,
-                               p = TRUE, na_include = TRUE, cont = "median")
+# note that since this is assigned to a variable, 
+# it shows up in the Environment tab, but doesn't get printed
+demographics_table = heart_data %>%
+  summary_factorlist(dependent, explanatory,
+                     p = TRUE, na_include = TRUE)
 ```
 
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| fig-width: 10
-#| fig-height: 5
-
-
 demographics_table %>% 
-kable(row.names = FALSE, align = c("l", "l", "r", "r", "r", "r"))
+  kable(align = c("l", "l", "r", "r", "r", "r"))
 ```
 
-`finalfit` is also a function. This produces a `summary.factorlist` table, together with a univariable and multivariable logistic regression analysis. In the next session we will explore how to perform these analyses formally.
+`finalfit` is also a function. This produces a `summary_factorlist` table, together with a univariable and multivariable logistic regression analysis. In the next session we will explore how to perform these analyses formally.
 
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
+dependent = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp", "chol", "smoking", "arcus")
 
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor", "age", "sex.factor",
-                # "obstruct.factor", "perfor.factor", "adhere.factor",
-                "loccomp.factor", "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
-
-logreg_results = colon_data %>% 
+logreg_results = heart_data %>% 
   finalfit(dependent, explanatory)
 
 ```
 
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
-#| fig-width: 10
-#| fig-height: 5
-
 logreg_results %>% 
-  kable(row.names = FALSE,  align = c("l", "l", "r", "r", "r", "r"))
+  kable(row.names = FALSE, align = c("l", "l", "r", "r", "r", "r"))
 ```
 
 ```{r}
-#| echo: false
-#| message: false
-#| warning: false
 #| fig-width: 10
 #| fig-height: 5
 
-colon_data %>% 
+heart_data %>% 
   or_plot(dependent, explanatory)
-
 ```
 
+## Exercise 3
+
+Remove messages and warnings from the output of the above code chunks.
+
 ## Answers
+
+### 0.
+
+```{}
+dag {
+"Blood pressure" [pos="-1.438,0.881"]
+"Coronary heart disease" [outcome,pos="-1.150,0.983"]
+"Personality type" [exposure,pos="-1.730,0.993"]
+Age [adjusted,pos="-1.436,0.642"]
+Cholesterol [pos="-1.266,0.736"]
+Height [adjusted,pos="-1.436,0.700"]
+Smoking [pos="-1.437,0.825"]
+Weight [adjusted,pos="-1.436,0.740"]
+"Blood pressure" -> "Coronary heart disease"
+"Personality type" -> "Blood pressure"
+"Personality type" -> "Coronary heart disease"
+"Personality type" -> Smoking
+Age -> "Coronary heart disease"
+Age -> "Personality type"
+Cholesterol -> "Coronary heart disease"
+Height -> "Coronary heart disease"
+Height -> "Personality type"
+Smoking -> "Coronary heart disease"
+Weight -> "Coronary heart disease"
+Weight -> "Personality type"
+}
+```
 
 ### 1.
 
 ```{r}
-#| execute: false 
-
 # time against status 
-colon_data %>% 
-  ggplot(aes(time)) +
-  facet_wrap(~status.factor) +
-  geom_histogram(bins = 30, alpha = 0.6) +
-  labs(x = "Time (Days)")
+heart_data %>% 
+  ggplot(aes(timechd)) +
+  facet_wrap(~chd) +
+  geom_histogram()
 
-# time in years
-colon_data %>% 
-  ggplot(aes(time/365)) +
-  facet_wrap(~status.factor) +
-  geom_histogram(bins = 30, alpha = 0.6) +
-  labs(x = "Time (Years)")
+# time unit in years
+heart_data %>% 
+  ggplot(aes(timechd/365)) +
+  facet_wrap(~chd) +
+  geom_histogram()
 ```
 
 ### 2.
 
 ```{r}
-#| execute: false 
-
-colon_data = colon_data %>% 
+heart_data = heart_data %>% 
   mutate(age.10 = (age/10) %>% 
            ff_label("Age/10yr")) 
+```
 
+### 3.
+
+```{}
+#| warning: false
+#| message: false
 ```

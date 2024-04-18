@@ -2,113 +2,126 @@
 title: "Model building in action"
 author: "HealthyR+: Practical Logistic Regression, Session 3"
 date: today
+execute:
+  warning: false
 format:
+  pdf: default
   html:
     code-fold: true
 editor: visual
 ---
 
+Restart your session! If that doesn't clear your environment, refer back to the instructions from the top of the last session or ask a tutor.
+
 ```{r}
 #| message: false
 #| warning: false
 
-
 library(tidyverse)
 library(broom)
 library(finalfit)
-library(GGally) # ggpairs function
-library(pROC)   # auc statistic
-library(tidymodels)
 theme_set(theme_bw())
 
+heart_data = wcgs
 
-load(here::here("mydata_modified_use.rda"))
+# derived variables from previous session
+heart_data = heart_data %>%
+  mutate(years = (timechd/365) %>% 
+           ff_label("Time (years)"),
+         # CHD status at 8 years:
+         chd_8yr = case_when(years >= 8 ~ "No" ,
+                              years < 8 & chd == "Yes"  ~ "Yes",
+                              years < 8 & chd == "No" ~ "Censored",
+                              .default = "Other"
+                            ) %>% 
+           na_if("Censored") %>% 
+           factor() %>% 
+           ff_label("8-yr CHD"))
 ```
 
-# Variable selection
+# *Variable selection*
 
-Based on what we learned about our variables in the previous session we can start building our final model. We know that:
+*Based on what we learned about our variables in the previous session we can start building our final model. We know that:*
 
--   our incomplete observations are not different to the rest of the dataset.
--   our continuous variables (age, nodes) have a monotonous response to 5-year mortality (only goes in one direction).
--   our continuous variables are independent of each other, and independent of the categorical variables in our dataset.
--   we know which categorical variables are related to each other: extent to local complications.
+-   *our incomplete observations are not different to the rest of the dataset.*
+-   *our continuous variables (age, cholesterole) have a monotonous response to 8-year coronary heart disease (only goes in one direction).*
+-   *our continuous variables are independent of each other, and independent of the categorical variables in our dataset.*
+-   *we know which categorical variables are related to each other: smoking and personality - although this is a weak relationship.*
 
-# Model Fitting
+# *Model Fitting*
 
-Three things are important to keep looking at:
+*Three things are important to keep looking at:*
 
--   what is the association between a particular variable and the outcome (OR and 95%CI);
+-   *what is the association between a particular variable and the outcome (OR and 95% CI);*
 
--   how much information is a variable bringing to the model (change in AIC and c-statistic);
+-   *how much information is a variable bringing to the model, e.g., change in AIC (lower better) and c-statistic (higher better).*
 
--   how much influence does adding a variable have on the effect size of another variable, and in particular my variable of interest (a rule of thumb is seeing a greater than 10% change in the OR of the variable of interest when a new variable is added to the model, suggests the new variable is important).
+-   *how much influence does adding a variable have on the effect size of another variable, and in particular my variable of interest (a rule of thumb is seeing a greater than 10% change in the OR of the variable of interest when a new variable is added to the model, suggests the new variable is important).*
 
-## Multivariable model fitting 1 - start simple
+## *Multivariable model fitting 1 - start simple*
 
-Script set-up and most basic logistic regression model (fit1 from Session 2)
+*Script set-up and most basic logistic regression model (fit1 from Session 2)*
 
 ```{r}
-fit1_smrz = colon_data %>% 
-  finalfit("mort_5yr", "rx.factor", metrics = TRUE)
+fit1_chd = heart_data %>% 
+  finalfit("chd_8yr", "personality_2L", metrics = TRUE)
 
-fit1     = fit1_smrz[[1]]
-met_fit1 = fit1_smrz[[2]]
-rm(fit1_smrz) # good idea to remove this to reduce typos when copying
+fit1     = fit1_chd[[1]]
+met_fit1 = fit1_chd[[2]]
+rm(fit1_chd) # good idea to remove this to reduce typos when copying
 
 ```
 
-## Multivariable model fitting 2 - maximal model
+## *Multivariable model fitting 2 - maximal model*
 
-Create the variables `fit2_smrz`, `fit2` (first element of `finalfit(..., metrics = TRUE)`) and `met_fit2` using all of the variables from the end of Session 1.
+*Create the variables `fit2_chd`, `fit2` (first element of `finalfit(..., metrics = TRUE)`) and `met_fit2` using all of the variables from the end of Session 1.*
 
 ```{r}
-dependent   = "mort_5yr"
-explanatory = c("rx.factor", "age", "sex.factor",
-                "loccomp.factor", "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
+dependent   = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp", "chol", "smoking", "arcus")
 
-fit2_smrz = colon_data %>% 
+fit2_chd = heart_data %>% 
   finalfit(dependent, explanatory, metrics = TRUE)
 
-fit2     = fit2_smrz[[1]]
-met_fit2 = fit2_smrz[[2]]
-rm(fit2_smrz)
-
+fit2     = fit2_chd[[1]]
+met_fit2 = fit2_chd[[2]]
+rm(fit2_chd)
 ```
 
-Look at the `met_` variables in your Environment tab: better already, isn't it!
+*Look at the `met_` variables in your Environment tab: better already, isn't it!*
 
-## Multivariable model fitting 3 - is `loccomp.factor` a mediator?
+## *Multivariable model fitting 3 - is `Smoking` a mediator?*
 
-A mediator is a variable that that lies on the causal pathway between the exposure and the outcome of interest.
+*A mediator is a variable that that lies on the causal pathway between the exposure and the outcome of interest.*
 
 ```{r}
 # Fit 3
+dependent   = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp", "chol",
+                #"smoking",
+                "arcus")
 
-dependent   = "mort_5yr"
-explanatory = c("rx.factor", "age", "sex.factor",
-                # "loccomp.factor",
-                "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
-
-fit3_smrz = colon_data %>% 
+fit3_chd = heart_data %>% 
   finalfit(dependent, explanatory, metrics = TRUE)
 
-fit3     = fit3_smrz[[1]]
-met_fit3 = fit3_smrz[[2]]
-rm(fit3_smrz)
+fit3     = fit3_chd[[1]]
+met_fit3 = fit3_chd[[2]]
+rm(fit3_chd)
 
 
-# Does treatment predict local complications?
+# Does smoking predict personality?
 
-colon_data %>% 
-  finalfit("loccomp.factor", "rx.factor", metrics = TRUE)
+heart_data %>% 
+  finalfit("personality_2L", "smoking", metrics = TRUE)
 ```
 
-## Multivariable model fitting 4 - omit `surg.factor`
+## *Multivariable model fitting 4 - omit `systolic blood pressure`*
 
-Again, copy the above code and create a `fit4` where we further leave out `surg.factor` from the explanatory variable list
+### *Exercise 1*
+
+*Copy the above code and create a `fit4` where we further leave out `sbp` from the explanatory variable list*
 
 ```{r}
 # Your R code here... 
@@ -118,213 +131,109 @@ Again, copy the above code and create a `fit4` where we further leave out `surg.
 
 ```
 
-## Multivariable model fitting 5
+Looks like it is adding information after all. What if we omit weight?
 
-### Collapsing variable levels
+## *Multivariable model fitting 5*
 
-Looks like it doesn't matter whether the tumor is in the submucosa or in the muscle, so we can collapse those levels into one and call it `fit5`:
+### *Categorising a continuous variable*
+
+*The effect of systolic blood pressure may not be linear - check back to the plots we made in Session 2. Let's cut it into three categories.*
 
 ```{r}
+heart_data  = heart_data %>% 
+  mutate(sbp.2groups = if_else(sbp <= 120, "Normal", "High") %>% 
+           factor() %>% 
+           fct_relevel("Normal") %>% 
+           ff_label("Systolic blood pressure")
+         )
 
-colon_data = colon_data %>% 
-mutate(extent.factor2 = extent.factor %>%
-         fct_collapse("Submucosa-Muscle" = c("Submucosa", "Muscle")))
-  
+heart_data %>% 
+  count(sbp.2groups)
 
-dependent   = "mort_5yr"
-explanatory = c("rx.factor",
+dependent   = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                "sbp.2groups",
+                "chol",
+                "smoking",
+                "arcus")
+
+fit5_chd = heart_data %>% 
+  finalfit(dependent, explanatory, metrics = TRUE)
+
+fit5      = fit5_chd[[1]]
+met_fit5  = fit5_chd[[2]]
+rm(fit5_chd)
+
+```
+
+## *Model so far*
+
+*Note `explanatory.multi` syntax to include to specify multivariable model variables included in the OR (multivariable full) column output. Explanatory multi is a useful tool for assessing whether to retain variables in a model.*
+
+```{r}
+dependent   = "chd_8yr"
+explanatory = c("personality_2L",
                 "age",
-                "sex.factor",
-                "differ.factor",
-                "extent.factor2",
-                "nodes")
+                "height",
+                "weight",
+                "sbp.2groups",
+                "chol",
+                "smoking",
+                "arcus")
 
-fit5_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
 
-fit5     = fit5_smrz[[1]]
-met_fit5 = fit5_smrz[[2]]
-rm(fit5_smrz)
-
-```
-
-### Exercise 2
-
-Copy the above code. Collapse the differentiation variable so that "Well" and "Moderate" are now "Well-Moderate". Create fit 6 using this collapsed variable instead of `differ.factor`.
-
-```{r}
-# Your R code here...
-
-# Fit 6
-
-```
-
-```{r}
-# Hint: use fct_collapse 
-
-colon_data = colon_data %>% 
-  mutate(differ.factor2 = differ.factor %>%
-           fct_collapse("Well-Moderate" = c("Well", "Moderate")))
-```
-
-## Multivariable model fitting 7 - Dual-agent vs single-agent/observation
-
-```{r}
-
-colon_data = colon_data %>% 
-mutate(rx.factor2 = rx.factor %>%
-         fct_collapse("Obs-Lev" = c("Obs", "Lev")))
-  
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor2",
+explanatory.multi = c("personality_2L",
                 "age",
-                "sex.factor",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes")
+                #"height",
+                "weight",
+                "sbp.2groups",
+                "chol",
+                "smoking" #,
+                #"arcus"
+                )
 
-fit7_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
-
-fit7     = fit7_smrz[[1]]
-met_fit7 = fit7_smrz[[2]]
-rm(fit7_smrz)
-
-```
-
-Note how the metrics hardly change during this collapsing, but the coefficients do change markedly.
-
-## Multivariable model fitting 8
-
-### What do we do with non significant demographic variables?
-
-We may expect age to be associated with the outcome because it so commonly is. But there is weak evidence of an association in the univariable analysis. We have shown above that the relationship of age to the outcome may not be linear, therefore we need to act on this.
-
-We can either convert age to a categorical variable or include it with a quadratic term
-
-```{r}
-# including age as a factor 
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor2",
-                "age.factor",
-                "sex.factor",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes")
-
-fit8_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
-
-fit8     = fit8_smrz[[1]]
-met_fit8 = fit8_smrz[[2]]
-rm(fit8_smrz)
-```
-
-```{r}
-# age as a quadratic
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor2",
-                "age",
-                "I(age^2)", # this is the syntax used to add the quadratic term
-                "sex.factor",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes")
-
-fit8_smrz_quad = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
-
-fit8_quad     = fit8_smrz_quad[[1]]
-met_fit8_quad = fit8_smrz_quad[[2]]
-rm(fit8_smrz_quad)
-```
-
-### Do we keep demographics if they are not significant?
-
-Variables that don't have a significant effect can still be confounding
-
-Why are we keeping the sex variable?
-
-```{r}
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor2",
-                "age.factor",
-                # "sex.factor",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes")
-
-fit8_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
-
-fit8     = fit8_smrz[[1]]
-met_fit8 = fit8_smrz[[2]]
-rm(fit8_smrz)
-
-```
-
-In this case, sex does not affect the final results at all, but it would be wise to keep it as it is a  well-known confounder from other trials.
-
-## Model so far
-
-Note `explanatory.multi` syntax to include to specify multivariable model variables included in the OR (multivariable full) column output. Explanatory multi is a useful tool for assessing whether to retain variables in a model.
-
-```{r}
-dependent   = "mort_5yr"
-explanatory = c("rx.factor2", "age.factor", "sex.factor",
-                "loccomp.factor", "differ.factor2",
-                "extent.factor2", "surg.factor", "nodes")
-
-explanatory.multi = c("rx.factor2",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes") # without age and sex
-
-fit8_smrz = colon_data %>% 
+fit6_chd = heart_data %>% 
   finalfit(dependent, explanatory, explanatory.multi, metrics = TRUE, keep_models = TRUE)
 
-fit8     = fit8_smrz[[1]]
-met_fit8 = fit8_smrz[[2]]
-rm(fit8_smrz)
+fit6     = fit6_chd[[1]]
+met_fit6 = fit6_chd[[2]]
+rm(fit6_mchd)
 
 ```
 
-# Interactions
+# *Interactions*
 
-When an interaction exists between two explanatory variables, say **treatment** and **differentiation**, it implies that the size of the treatment effect on mortality, differs by differentiation. Up until now, the model as assumed that the effect of treatment on death is the same whether the cancer is well-moderately differentiated or poorly differentiated.
+*When an interaction exists between two explanatory variables, say **personality type** and **age**, it implies that the size of the personality effect on CHD, differs by blood pressure. Up until now, the model as assumed that the effect of personality on CHD is the same whether normal or high blood pressure.*
 
-But it might be reasonable to hypothesise that the chemotherapy may work better on those with poorer prognosis cancers.
+*But it might be reasonable to hypothesise that having high blood pressure is more harmful when you also have a type A personality.*
 
-We can add an interaction term to the model thus:
+*We can add an interaction term to the model thus:*
 
 ```{r}
-dependent   = "mort_5yr"
+dependent   = "chd_8yr"
+explanatory = c("personality_2L*sbp.2groups",
+                "age",
+                "height",
+                "weight",
+                #"sbp.2groups",
+                "chol",
+                "smoking",
+                "arcus")
 
-explanatory = c("rx.factor2", "age.factor", "sex.factor",
-                "loccomp.factor", "differ.factor2",
-                "extent.factor2", "surg.factor", "nodes")
+fit7_chd = heart_data %>% 
+  finalfit(dependent, explanatory, metrics = TRUE)
 
-
-explanatory.multi = c("rx.factor2*differ.factor2", "extent.factor2", "nodes", "age.factor", "sex.factor")
-
-fit9_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, explanatory.multi, metrics = TRUE, keep_models = TRUE)
-
-fit9     = fit9_smrz[[1]]
-met_fit9 = fit9_smrz[[2]]
-rm(fit9_smrz)
+fit7     = fit7_chd[[1]]
+met_fit7 = fit7_chd[[2]]
+rm(fit7_chd)
 
 ```
 
-The exponentiated coefficient for the interaction is a ratio. It can be interpretted as the factor by which the odds ratio of the treatment changes when moving from the first level of the interaction variable (differentiation) to the next. This is confusing! We will discuss in detail.
+*The exponentiated coefficient for the interaction is a ratio. It can be interpreted as the factor by which the odds ratio of the personality changes when moving from the first level of the interaction variable (Normal) to the next (High).*
 
-## Interaction plots and prediction (advanced)
+## *Interaction plots and prediction (advanced)*
 
-We can plot the response for the interaction to understand the interaction. This involved using `augment` which is considered advanced. A deep understanding of this is not required to complete the course.
+*We can plot the response for the interaction to understand the interaction. This involved using `augment` which is considered advanced. A deep understanding of this is not required to complete the course.*
 
 ```{r}
 #| fig-width: 5
@@ -336,26 +245,43 @@ We can plot the response for the interaction to understand the interaction. This
 # Create a set of patient characteristics by which to predict the response.
 # Take the first line of the original tibble, repeat it 4 times
 # then create new columns with different levels
-newdata = colon_data %>% 
+newdata = heart_data %>% 
   slice(rep(1, 4)) %>%
-  mutate(rx.factor2     = c("Obs-Lev",       "Lev+5FU",       "Obs-Lev", "Lev+5FU"),
-         differ.factor2 = c("Well-Moderate", "Well-Moderate", "Poor",    "Poor"))
+  mutate(personality_2L     = c("B", "A", "A", "B"),
+         sbp.2groups = c("Normal", "High", "Normal", "High"))
 
 
 # Make rownames for easy identification. 
-rownames(newdata) = c("Obs-Lev/Well-Moderate", "Lev+5FU/Well-Moderate", 
-                      "Obs-Lev/Poor", "Lev+5FU/Poor")
+rownames(newdata) = c("B/Normal", "A/High", 
+                      "A/Normal", "B/High")
 
 # Run the models. 
 ## Note, we are using finalfit::glmmulti 
-dependent   = "mort_5yr"
+dependent   = "chd_8yr"
+explanatory = c("personality_2L",
+                "age",
+                "height",
+                "weight",
+                "sbp.2groups",
+                "chol",
+                "smoking",
+                "arcus")
 
-explanatory.multi = c("rx.factor2", "age.factor","sex.factor","differ.factor2", "extent.factor2","nodes")
-fit8 = colon_data %>% glmmulti(dependent, explanatory.multi)
+fit8_chd = heart_data %>% 
+  glmmulti(dependent, explanatory)
 
-explanatory.multi = c("rx.factor2*differ.factor2", "age.factor","sex.factor", "extent.factor2","nodes")
-fit9 = colon_data %>% glmmulti(dependent, explanatory.multi)
+dependent   = "chd_8yr"
+explanatory = c("personality_2L*sbp.2groups",
+                "age",
+                "height",
+                "weight",
+                #"sbp.2groups",
+                "chol",
+                "smoking",
+                "arcus")
 
+fit9_chd = heart_data %>%
+  glmmulti(dependent, explanatory)
 
 ```
 
@@ -363,129 +289,84 @@ fit9 = colon_data %>% glmmulti(dependent, explanatory.multi)
 
 ## This code is complex but you can understand it if you work through. 
 
-fit8 %>% 
+fit8_chd %>% 
   augment(newdata = newdata, type.predict = "link") %>%
-  separate(.rownames, into = c("treatment", "differentiation"), sep = "/") %>%
+  separate(.rownames, into = c("personality_2L", "sbp.2groups"), sep = "/") %>%
   mutate(
-    treatment = factor(treatment, levels=c("Obs-Lev", "Lev+5FU"))) %>% 
-  ggplot(aes(x = treatment, y=.fitted, group=differentiation, colour=differentiation))+
+    personality_2L = factor(personality_2L, levels=c("B", "A"))) %>% 
+  ggplot(aes(x = personality_2L, y=.fitted, group=sbp.2groups, colour=sbp.2groups))+
   geom_line()+
-  ylab("Log-odds death")+
+  ylab("Log-odds death") +
   ggtitle("Without interaction")
 
-fit9 %>% 
+fit9_chd %>% 
   augment(newdata = newdata, type.predict = "link") %>%
-  separate(.rownames, into = c("treatment", "differentiation"), sep = "/") %>%
+  separate(.rownames, into = c("personality_2L", "sbp.2groups"), sep = "/") %>%
   mutate(
-    treatment = factor(treatment, levels=c("Obs-Lev", "Lev+5FU"))) %>% 
-  ggplot(aes(x = treatment, y=.fitted, group=differentiation, colour=differentiation))+
+    personality_2L = factor(personality_2L, levels=c("B", "A"))) %>% 
+  ggplot(aes(x = personality_2L, y=.fitted, group=sbp.2groups, colour=sbp.2groups))+
   geom_line()+
-  ylab("Log-odds death")+
+  ylab("Log-odds death") +
   ggtitle("With interaction")
 
 ```
 
-This interaction is not significant.
+*This interaction is not significant.*
 
-# Accounting for population stratification with random effects
+# *Accounting for population stratification with random effects*
 
-We have noted previously that we should incorporate population stratification into models if available. This is important. If we have patients clustered by town, or hospital, or country, then this should be accounted for. Those patients are likely to have commonalities not captured else where in the data. If we wish the estimates for our other characteristics to be accurate, this is required.
+*We have noted previously that we should incorporate population stratification into models if available. This is important. If we have patients clustered by town, or hospital, or country, then this should be accounted for. Those patients are likely to have commonalities not captured else where in the data. If we wish the estimates for our other characteristics to be accurate, this is required.*
 
-Our models so far have included variables as `fixed effects`. We can go further and include something called `random effects`. This is useful when we have variables that we wish to account for, but not necessarily estimate directly, without losing power in the main analysis.
+*Our models so far have included variables as `fixed effects`. We can go further and include something called `random effects`. This is useful when we have variables that we wish to account for, but not necessarily estimate directly, without losing power in the main analysis.*
 
-Turns out we actually have information on which hospitals the data was gathered from!
+*Turns out we actually have information on which hospitals the data was gathered from!*
 
 ```{r}
+#| eval: false
 
 load(here::here("patient_hospitals.rda"))
 
-colon_data = colon_data %>% left_join(hospitals)
+heart_data = heart_data %>% left_join(hospitals)
 
-dependent   = "mort_5yr"
-explanatory = c("rx.factor2",
-                "age.factor",
-                "sex.factor",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes")
+dependent   = "chd_8yr"
+explanatory = c("personality_2L",
+                "age",
+                "height",
+                "weight",
+                "sbp.2groups",
+                "chol",
+                "smoking",
+                "arcus")
 
-fit10_smrz = colon_data %>% 
+fit10_chd = heart_data %>% 
   finalfit(dependent, explanatory,
            metrics = TRUE, random_effect = "hospital")
 
-fit10 = fit10_smrz[[1]]
-met_fit10 = fit10_smrz[[2]]
+fit10     = fit10_chd[[1]]
+met_fit10 = fit10_chd[[2]]
 
 ```
 
-To include a random effect, `finalfit` can't use `glm()` - it is to use `glmer()` from `library(lme4)` instead.
+*To include a random effect, `finalfit` can't use `glm()` - it uses `glmer()` from `library(lme4)` instead.*
 
-## Answers
+## *Answers*
 
-### 1.
-
-```{r}
-
-# Fit 3
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor", "age", "sex.factor",
-                # "obstruct.factor", "perfor.factor", "adhere.factor",
-                # "loccomp.factor",
-                "differ.factor",
-                "extent.factor", "surg.factor", "nodes")
-
-fit3_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
-
-fit3     = fit3_smrz[[1]]
-met_fit3 = fit3_smrz[[2]]
-rm(fit3_smrz)
-```
+### *1.*
 
 ```{r}
-
 # Fit 4
 
-dependent   = "mort_5yr"
-explanatory = c("rx.factor", "age", "sex.factor",
-                # "obstruct.factor", "perfor.factor", "adhere.factor",
-                # "loccomp.factor",
-                "differ.factor",
-                "extent.factor",
-                # "surg.factor",
-                "nodes")
+dependent   = "chd_8yr"
+explanatory = c("personality_2L","age", "height", "weight",
+                #"sbp",
+                "chol",
+                "smoking",
+                "arcus")
 
-fit4_smrz = colon_data %>% 
+fit4_chd = heart_data %>% 
   finalfit(dependent, explanatory, metrics = TRUE)
 
-fit4     = fit4_smrz[[1]]
-met_fit4 = fit4_smrz[[2]]
-rm(fit4_smrz)
-```
-
-### 2.
-
-```{r}
-# Fit 6
-
-colon_data = colon_data %>% 
-  mutate(differ.factor2 = differ.factor %>%
-           fct_collapse("Well-Moderate" = c("Well", "Moderate")))
-  
-
-dependent   = "mort_5yr"
-explanatory = c("rx.factor",
-                "age",
-                "sex.factor",
-                "differ.factor2",
-                "extent.factor2",
-                "nodes")
-
-fit6_smrz = colon_data %>% 
-  finalfit(dependent, explanatory, metrics = TRUE)
-
-fit6     = fit6_smrz[[1]]
-met_fit6 = fit6_smrz[[2]]
-rm(fit6_smrz)
+fit4     = fit4_chd[[1]]
+met_fit4  = fit4_chd[[2]]
+rm(fit4_chd)
 ```
