@@ -98,7 +98,10 @@ rm(fit2_chd)
 ```{r}
 # Fit 3
 dependent   = "chd_8yr"
-explanatory = c("personality_2L","age", "height", "weight",
+explanatory = c("personality_2L",
+                "age",
+                "height",
+                "weight",
                 "sbp", "chol",
                 #"smoking",
                 "arcus")
@@ -151,7 +154,10 @@ heart_data %>%
   count(sbp.2groups)
 
 dependent   = "chd_8yr"
-explanatory = c("personality_2L","age", "height", "weight",
+explanatory = c("personality_2L",
+                "age",
+                "height",
+                "weight",
                 "sbp.2groups",
                 "chol",
                 "smoking",
@@ -322,11 +328,10 @@ fit9_chd %>%
 *Turns out we actually have information on which hospitals the data was gathered from!*
 
 ```{r}
-#| eval: false
+hospital_data = read_csv(here::here("patient_hospitals.csv"))
 
-load(here::here("patient_hospitals.rda"))
-
-heart_data = heart_data %>% left_join(hospitals)
+heart_data = heart_data %>%
+  left_join(hospital_data)
 
 dependent   = "chd_8yr"
 explanatory = c("personality_2L",
